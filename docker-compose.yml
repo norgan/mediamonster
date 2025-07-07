@@ -1,0 +1,146 @@
+version: "3.8"
+
+#############################
+#  Media‑Monster stack      #
+#  Drop‑in self‑contained   #
+#  media ingestion + serve  #
+#############################
+
+networks:
+  media_net:
+    driver: bridge
+
+volumes:
+  jellyfin_config:
+  qbittorrent_config:
+  radarr_config:
+  sonarr_config:
+  lidarr_config:
+  prowlarr_config:
+  downloads_incomplete:
+  downloads_complete:
+  media_library:
+
+services:
+  ########################
+  # Jellyfin media server
+  ########################
+  jellyfin:
+    image: jellyfin/jellyfin:10.10
+    container_name: jellyfin
+    user: 1000:1000                           # matches host UID/GID
+    restart: unless-stopped
+    networks:
+      - media_net
+    ports:
+      - "8096:8096"                           # HTTP UI / API
+      - "8920:8920"                           # HTTPS (self‑signed)
+    volumes:
+      - jellyfin_config:/config
+      - media_library:/media                  # Movies, TV, Music root
+      # comment in if/when you add QuickSync or NVENC GPU mapping
+      # - /dev/dri:/dev/dri
+
+  #################################
+  # qBittorrent (download engine)
+  #################################
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+      - WEBUI_PORT=8080
+      # change these to secure creds
+      - QBT_WEBUI_USERNAME=admin
+      - QBT_WEBUI_PASSWORD=changeme
+    networks:
+      - media_net
+    ports:
+      - "8080:8080"                           # Web UI
+      - "6881:6881"                           # TCP BitTorrent
+      - "6881:6881/udp"                       # UDP DHT
+    volumes:
+      - qbittorrent_config:/config
+      - downloads_incomplete:/incomplete      # partial pieces
+      - media_library:/media                  # finished files land here directly
+    restart: unless-stopped
+
+  #################################
+  # Prowlarr – indexer aggregator
+  #################################
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    networks:
+      - media_net
+    ports:
+      - "9696:9696"
+    volumes:
+      - prowlarr_config:/config
+    restart: unless-stopped
+
+  ############################
+  # Radarr – movies automation
+  ############################
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    networks:
+      - media_net
+    ports:
+      - "7878:7878"
+    volumes:
+      - radarr_config:/config
+      - media_library:/media
+      - downloads_incomplete:/downloads
+    restart: unless-stopped
+
+  ############################
+  # Sonarr – TV automation   
+  ############################
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    networks:
+      - media_net
+    ports:
+      - "8989:8989"
+    volumes:
+      - sonarr_config:/config
+      - media_library:/media
+      - downloads_incomplete:/downloads
+    restart: unless-stopped
+
+  ###########################
+  # Lidarr – music automation
+  ###########################
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    networks:
+      - media_net
+    ports:
+      - "8686:8686"
+    volumes:
+      - lidarr_config:/config
+      - media_library:/media
+      - downloads_incomplete:/downloads
+    restart: unless-stopped
